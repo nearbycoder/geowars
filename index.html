@@ -8,6 +8,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Geo Wars: Neon Evolved</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-1.1 -1.1 2.2 2.2'%3E%3Crect x='-1.1' y='-1.1' width='2.2' height='2.2' rx='.4' fill='%23000'/%3E%3Cpath d='M.45-.95L.85.7 0 .3-.85.7-.45-.95-.2-.1H.2Z' fill='none' stroke='%233ef0ff' stroke-width='.16' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
@@ -502,7 +503,11 @@ const Grid = (() => {
     const X = wx * K, Y = wy * K, Z = 14, R2 = (wr * K) ** 2, [c0, c1, r0, r1] = bounds(wx, wy, wr);
     for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
       const i = r * cols + c, dx = px[i] - X, dy = py[i] - Y, dz = pz[i] - Z, d2 = dx * dx + dy * dy + dz * dz;
-      if (d2 < R2) { const f = 100 * force / (10000 + d2); ax[i] += dx * f; ay[i] += dy * f; az[i] += dz * f; dm[i] = Math.max(0.3, dm[i] * 0.6); }
+      if (d2 < R2) {
+        let f = 100 * force / (10000 + d2);
+        const mag = f * Math.sqrt(d2); if (mag > 13) f *= 13 / mag;   // cap impulse so the lattice never folds over itself
+        ax[i] += dx * f; ay[i] += dy * f; az[i] += dz * f; dm[i] = Math.max(0.3, dm[i] * 0.6);
+      }
     }
   }
   function implosive(force, wx, wy, wr) {
@@ -617,10 +622,10 @@ function explode(x, y, hex, n, speed, o = {}) {
   n = Math.round(n * (LOW ? 0.55 : 1));
   const life = o.life || 1, w = o.w || 0.085, I = o.i || 2.4;
   for (let i = 0; i < n; i++) {
-    const a = Math.random() * TAU, s = speed * (0.12 + 0.88 * Math.random());
+    const a = Math.random() * TAU, s = speed * (0.12 + 0.88 * Math.random()), off = Math.random() * Math.min(1.4, speed * 0.035);
     let r = _c.r, g = _c.g, b = _c.b; const m = Math.random();
     if (alt && m < 0.45) { r = _c2.r; g = _c2.g; b = _c2.b; } else if (m > 0.85) { r = lerp(r, 1, 0.7); g = lerp(g, 1, 0.7); b = lerp(b, 1, 0.7); }
-    addP(x, y, Math.cos(a) * s, Math.sin(a) * s, life * (0.45 + Math.random() * 0.75), r * I, g * I, b * I, w, o.len || 1, o.flags || 0);
+    addP(x + Math.cos(a) * off, y + Math.sin(a) * off, Math.cos(a) * s, Math.sin(a) * s, life * (0.45 + Math.random() * 0.75), r * I, g * I, b * I, w, o.len || 1, o.flags || 0);
   }
 }
 function spawnFx(x, y, hex) {
@@ -726,7 +731,7 @@ const BCOL = { n: [2.6, 1.7, 0.45], p: [2.4, 1.1, 2.6], b: [1.0, 2.6, 1.1], d: [
 
 // ---- geoms (instanced) ----
 const MAXG = 320;
-const geomMesh = new THREE.InstancedMesh(SH.geom, new THREE.MeshBasicMaterial({ color: new THREE.Color(0.95, 1.6, 0.25), side: THREE.DoubleSide }), MAXG);
+const geomMesh = new THREE.InstancedMesh(SH.geom, new THREE.MeshBasicMaterial({ color: new THREE.Color(0.75, 1.3, 0.2), side: THREE.DoubleSide }), MAXG);
 geomMesh.frustumCulled = false; geomMesh.count = 0; geomMesh.position.z = 0.08; scene.add(geomMesh);
 
 // ---- bomb wave ring ----
@@ -906,6 +911,7 @@ function readInput() {
     if (best) { ax = best.x - player.x; ay = best.y - player.y; }
   }
   inp.mx = mx; inp.my = my; inp.ax = ax; inp.ay = ay; inp.fire = fire && (ax !== 0 || ay !== 0);
+  if (window.__gwInput) window.__gwInput(inp);   // debug/bot hook
   return inp;
 }
 
@@ -1057,7 +1063,7 @@ function updateEnemies(dt) {
     for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) for (const o of cells[r * HC + c]) {
       if (o.id <= e.id || o.dead || o.type === 'blackhole' || o.type === 'rocket') continue;
       const dx = e.x - o.x, dy = e.y - o.y, rr = (e.r + o.r) * 0.85, d2 = dx * dx + dy * dy;
-      if (d2 < rr * rr && d2 > 1e-6) { const d = Math.sqrt(d2), p = (rr - d) / d * 0.25; e.x += dx * p; e.y += dy * p; o.x -= dx * p; o.y -= dy * p; }
+      if (d2 < rr * rr && d2 > 1e-6) { const d = Math.sqrt(d2), p = (rr - d) / d * 0.45; e.x += dx * p; e.y += dy * p; o.x -= dx * p; o.y -= dy * p; }
     }
   }
 }
@@ -1067,7 +1073,7 @@ function absorb(bh, e) {
   AudioSys.play('hit', 0.35, 0.5, panOf(bh.x));
   if (bh.mass >= 10) {   // overload!
     bh.dead = true;
-    explode(bh.x, bh.y, 0xff3030, 220, 34, { c2: 0xffffff, life: 1.5 });
+    explode(bh.x, bh.y, 0xff3030, 180, 34, { c2: 0xff9a60, life: 1.5, i: 1.6 });
     blast(bh.x, bh.y, 12, 0xff5050, 0.6);
     Grid.explosive(260, bh.x, bh.y, 16);
     shake = Math.max(shake, 0.9); aberr = 1;
@@ -1087,8 +1093,8 @@ function killEnemy(e, how) {
   if (how === 'absorb') { explode(e.x, e.y, d.c, 10, 8); return; }
   const mass = how === 'clear' || how === 'bomb';
   if (e.type === 'blackhole') {
-    explode(e.x, e.y, 0xff3030, 260, 38, { c2: 0xffaa55, life: 1.6, w: 0.1 });
-    explode(e.x, e.y, 0xffffff, 60, 20, { life: 0.9 });
+    explode(e.x, e.y, 0xff3030, 200, 38, { c2: 0xffaa55, life: 1.6, w: 0.1, i: 1.7 });
+    explode(e.x, e.y, 0xffffff, 40, 20, { life: 0.9, i: 1.4 });
     blast(e.x, e.y, 10, 0xff6040, 0.55);
     Grid.explosive(240, e.x, e.y, 16);
     shake = Math.max(shake, 0.8); aberr = Math.max(aberr, 0.8);
@@ -1203,7 +1209,7 @@ function dropGeoms(x, y, n) {
   for (let i = 0; i < n; i++) {
     if (geoms.length >= MAXG) geoms.shift();
     const a = rand(TAU), s = rand(3, 8);
-    geoms.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 8, a: rand(TAU), spin: rand(-5, 5), dead: false });
+    geoms.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 7, a: rand(TAU), spin: rand(-5, 5), dead: false });
   }
 }
 function updateGeoms(dt) {
@@ -1308,10 +1314,10 @@ function updateGates(dt) {
 }
 function detonateGate(g) {
   g.dead = true;
-  explode(g.x, g.y, 0xff8a1a, 140, 34, { c2: 0xffe640, life: 1.1 });
+  explode(g.x, g.y, 0xff8a1a, 100, 34, { c2: 0xffe640, life: 1.1, i: 1.7 });
   for (let i = -3; i <= 3; i++) explode(g.x + Math.cos(g.a) * i, g.y + Math.sin(g.a) * i, 0xffcc55, 6, 12, { life: 0.6 });
   blast(g.x, g.y, 8.5, 0xffa030, 0.45, 2.4);
-  Grid.explosive(220, g.x, g.y, 13);
+  Grid.explosive(110, g.x, g.y, 10);
   shake = Math.max(shake, 0.5); aberr = Math.max(aberr, 0.4);
   AudioSys.play('gate', 0.7, 1, panOf(g.x));
   addScore(25);
@@ -1347,9 +1353,9 @@ function updateZones(dt) {
     if (pop || expire) {
       z.on = false; z.grp.visible = false;
       if (pop) {
-        explode(z.x, z.y, 0xffe640, 120, 30, { c2: 0xffffff });
+        explode(z.x, z.y, 0xffe640, 100, 30, { c2: 0xffffff, i: 1.7 });
         blast(z.x, z.y, z.r + 4, 0xffe640, 0.5, 2.4);
-        Grid.explosive(200, z.x, z.y, 12);
+        Grid.explosive(110, z.x, z.y, 10);
         for (const e of enemies) if (!e.dead && Math.hypot(e.x - z.x, e.y - z.y) < z.r + 4) killEnemy(e, 'zone');
         AudioSys.play('gate', 0.5, 1.4);
         shake = Math.max(shake, 0.4);
@@ -1464,8 +1470,8 @@ function killPlayer() {
   const P = player;
   if (!P.alive || G.over) return;
   P.alive = false;
-  explode(P.x, P.y, 0xffffff, 220, 48, { c2: 0xffd040, life: 1.8, w: 0.1 });
-  explode(P.x, P.y, 0xff6020, 160, 30, { c2: 0xffe640, life: 2.2 });
+  explode(P.x, P.y, 0xffffff, 110, 60, { c2: 0xffd040, life: 1.8, w: 0.09, i: 1.1 });
+  explode(P.x, P.y, 0xff6020, 110, 36, { c2: 0xffe640, life: 2.2, i: 1.4 });
   explode(P.x, P.y, 0x3ef0ff, 90, 70, { life: 1.2, flags: 1 });
   blast(P.x, P.y, 14, 0xffe0a0, 0.8, 2.6); blast(P.x, P.y, 8, 0xff6020, 0.6, 2.2);
   Grid.explosive(380, P.x, P.y, 28);
@@ -1854,7 +1860,7 @@ function tick(rdt) {
   let dt = rdt;
   if (state === 'playing') {
     if (G.slowT > 0) G.slowT -= rdt;
-    dt = rdt * (G.slowT > 0 ? 0.15 + 0.85 * (1 - G.slowT / 1.3) : 1);
+    dt = rdt * (G.slowT > 0 ? 0.28 + 0.72 * (1 - G.slowT / 1.3) : 1);
     updateGame(dt, rdt);
   } else {
     if (state === 'menu') updateAttract(rdt);
@@ -1888,7 +1894,7 @@ document.body.classList.toggle('touch', lastInput === 'touch');
 setState('menu');
 $('#loading').remove();
 requestAnimationFrame(t => { last = t; frame(t); });
-window.__gw = { sim(sec) { for (let i = 0; i < sec * 60; i++) tick(1 / 60); }, get state() { return state; }, get G() { return G; }, enemies, bullets, player, startGame, spawnEnemy };
+window.__gw = { sim(sec) { for (let i = 0; i < sec * 60; i++) tick(1 / 60); }, get state() { return state; }, get G() { return G; }, enemies, bullets, geoms, gates, player, startGame, spawnEnemy };
 </script>
 <noscript><div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#fff">This game needs JavaScript.</div></noscript>
 </body>
